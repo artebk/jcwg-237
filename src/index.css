@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+.temp-gold {
+  color: #ffd84d;
+  font-weight: 200;
+  letter-spacing: -2px;
+}
+
+body {
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+}
+
+/* 레이더 지도 베이스맵: 다크 모노크롬 (어두운 흑백 관제 스타일) */
+.radar-dark-map-tiles {
+  filter: grayscale(100%) invert(92%) hue-rotate(180deg) brightness(88%) contrast(125%) !important;
+}
+
+/* 레이더 지도 베이스맵: 라이트 모노크롬 (밝은 흑백 스타일) */
+.radar-light-map-tiles {
+  filter: grayscale(100%) contrast(115%) brightness(95%) !important;
+}
+
+/* 레이더 비구름 타일: 고대비 및 선명한 컬러 채도 극대화 */
+.radar-tiles-smooth {
+  image-rendering: -webkit-optimize-contrast;
+  filter: contrast(1.4) saturate(2.2) brightness(1.15) drop-shadow(0 0 3px rgba(0, 0, 0, 0.6));
+  transition: opacity 0.2s ease-in-out;
+}
+

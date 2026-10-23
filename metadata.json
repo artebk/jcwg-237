@@ -1,0 +1,10 @@
+{
+  "name": "Remix 진주 초장동 날씨예보",
+  "description": "진주시 초장동(초전동) 실측 및 기상청/ECMWF 앙상블 기상 예보 웹애플리케이션",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
