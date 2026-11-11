@@ -1,10 +1,9 @@
 /**
- * [초전동 다관제점 CCTV 무화면 기상 실황 연산기 (Headless CCTV Ground Truth Engine)]
+ * [초전동 지상 관측점 노면 및 강우 실황 연산기 (Ground Truth Engine)]
  * 
- * - 대상 1: 국도 33호선 장재삼거리 CCTV (초전동 북단 간선도로 차량 와이퍼/노면 수분 반사율)
- * - 대상 2: 초전동 중심 상가 및 학원가 사거리 보행로 관측점 (평일 등하교 학생·학원가·상가 밀집 보행로 우산 착용률)
- * - 원칙: 사용자 화면에는 영상/뷰어를 일절 렌더링하지 않고 백그라운드(Headless)에서만 연산
- * - 목적: 현재 0h 실황(노면 젖음, 우산 착용 여부, 실시간 강우)의 지상 실측 신뢰도(Likelihood) 산출
+ * - 대상: 국도 33호선 장재삼거리 및 초전 중심 관측점
+ * - 원칙: 가상 영상 분석이나 허위 우산 착용률을 일절 배제하고, 실제 기상청 지상 실측(강수, 습도, 결로) 기반으로 연산
+ * - 목적: 현재 0h 실황(노면 수분, 실시간 강우 가능성)의 물리적 지상 실측 신뢰도(Likelihood) 산출
  */
 
 export interface CctvGroundTruthObservation {
@@ -14,8 +13,9 @@ export interface CctvGroundTruthObservation {
   roadWetConfidence: number; // 0.0 (완전 건조) ~ 1.0 (완전 젖음/물보라)
   rainDetected: boolean;
   fogDetected: boolean;
-  umbrellaIndex: number; // 0.0 (우산 없음) ~ 1.0 (다수 보행자 우산 착용 확정)
-  activityWeight?: number; // 시간대별 보행 활동도 가중치 (0.4 ~ 1.3)
+  /** @deprecated 가상 영상 분석 뱃지 제거로 미사용 (상시 0.0) */
+  umbrellaIndex: number;
+  activityWeight?: number;
   skyConditionConfidence: 'clear' | 'partlyCloudy' | 'overcast' | 'unknown';
 }
 
@@ -25,13 +25,13 @@ export interface MultiStationGroundTruth {
   stations: {
     jangjae: CctvGroundTruthObservation;
     commercialSquare: CctvGroundTruthObservation;
-    /** 하위 호환용 alias */
     chojeonPark?: CctvGroundTruthObservation;
   };
   combinedRoadWetConfidence: number;
+  /** @deprecated 가상 영상 분석 뱃지 제거로 미사용 (상시 0.0) */
   combinedUmbrellaIndex: number;
   groundRainLikelihood: number; // 지상 실측 강우 우도비 계산용 (0.0 ~ 1.0)
-  pedestrianActivityWeight: number; // 현재 시각 보행 활동도 가중치 w_activity(t)
+  pedestrianActivityWeight: number;
 }
 
 // 메모리 캐시 (5분 유효)
@@ -40,36 +40,7 @@ let lastAnalysisTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
- * [수학적 계산식] 시간대별 보행자 활동도 가중치 함수 w_activity(t)
- * 
- * - 07:30 ~ 09:00: 1.25 (등교 및 출근 첨두시간)
- * - 16:30 ~ 22:00: 1.30 (하교, 학원가, 상가 첨두시간)
- * - 09:00 ~ 16:30: 0.90 (평일 낮 일상 활동시간)
- * - 22:00 ~ 07:30: 0.40 (심야 및 새벽 저활동시간)
- */
-export function calculatePedestrianActivityWeight(date: Date = new Date()): number {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const timeInMinutes = hours * 60 + minutes;
-
-  const morningStart = 7 * 60 + 30; // 07:30
-  const morningEnd = 9 * 60;        // 09:00
-  const eveningStart = 16 * 60 + 30;// 16:30
-  const eveningEnd = 22 * 60;       // 22:00
-
-  if (timeInMinutes >= morningStart && timeInMinutes <= morningEnd) {
-    return 1.25; // 등교 및 출근 시간대
-  } else if (timeInMinutes >= eveningStart && timeInMinutes <= eveningEnd) {
-    return 1.30; // 하교, 학원가, 상가 첨두 시간대
-  } else if (timeInMinutes > morningEnd && timeInMinutes < eveningStart) {
-    return 0.90; // 낮 시간대
-  } else {
-    return 0.40; // 심야 및 새벽 시간대 (표본 부족으로 보정 감쇄)
-  }
-}
-
-/**
- * 초전동 다중 지상 관측점(장재삼거리 간선도로 + 중심 상가·학원가 사거리 보행로) 백그라운드 연산
+ * 초전동 지상 관측점 실황 백그라운드 연산 (물리 모델 기반)
  */
 export async function analyzeMultiStationGroundTruth(envState?: {
   liveHumidity?: number;
@@ -81,12 +52,7 @@ export async function analyzeMultiStationGroundTruth(envState?: {
     return cachedMultiStation;
   }
 
-  const nowDate = new Date();
-  const curHour = nowDate.getHours();
-  const isDay = curHour >= 6 && curHour < 19;
-  const wActivity = calculatePedestrianActivityWeight(nowDate);
-
-  // 1. 장재삼거리 (차량 전용 간선도로)
+  // 1. 장재삼거리 관측점
   const jangjaeObs: CctvGroundTruthObservation = {
     timestamp: now,
     locationName: "국도 33호선 장재삼거리 (초전동 북단)",
@@ -94,20 +60,19 @@ export async function analyzeMultiStationGroundTruth(envState?: {
     roadWetConfidence: 0.0,
     rainDetected: false,
     fogDetected: false,
-    umbrellaIndex: 0.0, // 차량 전용도로는 보행자 우산 관측 불가
+    umbrellaIndex: 0.0,
     skyConditionConfidence: 'unknown'
   };
 
-  // 2. 초전동 중심 상가 및 학원가 사거리 보행로 (유동인구 우산 착용률 및 보도블록 노면 관측)
+  // 2. 초전 중심 상가 관측점
   const commercialObs: CctvGroundTruthObservation = {
     timestamp: now,
-    locationName: "초전동 중심 상가 및 학원가 사거리 보행로",
+    locationName: "초전동 중심 관측점",
     isAvailable: true,
     roadWetConfidence: 0.0,
     rainDetected: false,
     fogDetected: false,
     umbrellaIndex: 0.0,
-    activityWeight: wActivity,
     skyConditionConfidence: 'unknown'
   };
 
@@ -118,46 +83,24 @@ export async function analyzeMultiStationGroundTruth(envState?: {
     const isWmoRain = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(wmo);
 
     if (rain >= 0.1 || isWmoRain) {
-      jangjaeObs.roadWetConfidence = Math.min(1.0, 0.6 + rain * 0.2);
+      const wetness = Math.min(1.0, 0.4 + rain * 0.3);
+      jangjaeObs.roadWetConfidence = wetness;
       jangjaeObs.rainDetected = true;
-
-      // 보행자 우산 착용 기본값
-      const rawUmbrella = isDay ? (rain >= 0.5 ? 0.95 : 0.75) : 0.65;
-      // 시간대별 활동 가중치 함수 w_activity(t) 반영:
-      // I_umbrella = min(1.0, RawUmbrellaRate * (0.7 + 0.3 * w_activity))
-      const weightedUmbrella = Math.min(1.0, rawUmbrella * (0.7 + 0.3 * wActivity));
-
-      commercialObs.roadWetConfidence = Math.min(1.0, 0.7 + rain * 0.2);
+      commercialObs.roadWetConfidence = wetness;
       commercialObs.rainDetected = true;
-      commercialObs.umbrellaIndex = Number(weightedUmbrella.toFixed(2));
     } else if (hum >= 90) {
       // 결로 상태
-      jangjaeObs.roadWetConfidence = 0.4;
-      commercialObs.roadWetConfidence = 0.45;
-      commercialObs.umbrellaIndex = 0.0;
+      jangjaeObs.roadWetConfidence = 0.35;
+      commercialObs.roadWetConfidence = 0.35;
+      jangjaeObs.fogDetected = true;
+      commercialObs.fogDetected = true;
     }
 
-    // 픽셀 연산 Offscreen 캔버스 가드 (Headless)
-    if (typeof document !== 'undefined') {
-      const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 36;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (ctx) {
-        ctx.fillStyle = isDay ? '#87CEEB' : '#1A1A24';
-        ctx.fillRect(0, 0, 64, 36);
-      }
-    }
-
-    // 다중 관측소 가중 합성 (장재삼거리 40% + 중심 상가·학원가 사거리 60%)
-    const combinedRoadWet = Number((jangjaeObs.roadWetConfidence * 0.4 + commercialObs.roadWetConfidence * 0.6).toFixed(2));
-    const combinedUmbrella = Number(commercialObs.umbrellaIndex.toFixed(2));
+    // 다중 관측소 가중 합성
+    const combinedRoadWet = Number((jangjaeObs.roadWetConfidence * 0.5 + commercialObs.roadWetConfidence * 0.5).toFixed(2));
 
     // 지상 강우 신뢰도 우도 점수 (0.0 ~ 1.0)
-    // 활동도가 높은 시간대에는 우산 관측의 기여도를 강화
-    const umbrellaWeightInScore = 0.5 + 0.1 * Math.min(1.3, wActivity);
-    const roadWeightInScore = 1.0 - umbrellaWeightInScore;
-    const groundRainScore = Math.min(1.0, combinedUmbrella * umbrellaWeightInScore + combinedRoadWet * roadWeightInScore);
+    const groundRainScore = Math.min(1.0, combinedRoadWet);
 
     const result: MultiStationGroundTruth = {
       timestamp: now,
@@ -165,12 +108,12 @@ export async function analyzeMultiStationGroundTruth(envState?: {
       stations: {
         jangjae: jangjaeObs,
         commercialSquare: commercialObs,
-        chojeonPark: commercialObs // 하위 호환
+        chojeonPark: commercialObs
       },
       combinedRoadWetConfidence: combinedRoadWet,
-      combinedUmbrellaIndex: combinedUmbrella,
+      combinedUmbrellaIndex: 0.0,
       groundRainLikelihood: Number(groundRainScore.toFixed(2)),
-      pedestrianActivityWeight: wActivity
+      pedestrianActivityWeight: 1.0
     };
 
     cachedMultiStation = result;
@@ -188,7 +131,7 @@ export async function analyzeMultiStationGroundTruth(envState?: {
       combinedRoadWetConfidence: 0.0,
       combinedUmbrellaIndex: 0.0,
       groundRainLikelihood: 0.0,
-      pedestrianActivityWeight: wActivity
+      pedestrianActivityWeight: 1.0
     };
   }
 }

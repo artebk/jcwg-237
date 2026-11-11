@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { HourlyForecast } from '../types';
 import { useDragScroll } from '../utils/useDragScroll';
-import { MoveHorizontal, Navigation } from 'lucide-react';
+import { MoveHorizontal, Navigation, Sparkles, Thermometer, CloudRain, Wind } from 'lucide-react';
 import { WeatherIcon } from './WeatherIcon';
+import { generateDailyWeatherSummary } from '../utils/weatherSummaryGenerator';
 
 interface HourlyTableChartProps {
   hourly: HourlyForecast[];
@@ -42,6 +43,9 @@ export const HourlyTableChart: React.FC<HourlyTableChartProps> = ({ hourly }) =>
   const curIdxInHourly = useMemo(() => {
     return hourly ? hourly.findIndex((h) => h.isCurrent) : -1;
   }, [hourly]);
+
+  // 오늘 날씨 핵심 브리핑 요약 (React Rules of Hooks 준수를 위해 early return 이전에 호출)
+  const dailySummary = useMemo(() => generateDailyWeatherSummary(hourly), [hourly]);
 
   const colWidth = 66;
 
@@ -105,6 +109,75 @@ export const HourlyTableChart: React.FC<HourlyTableChartProps> = ({ hourly }) =>
 
   return (
     <section className="flex-1 px-3 py-4 bg-[#0d172a]">
+      {/* 0. 오늘의 날씨 핵심 브리핑 & 생활 가이드 카드 (신규 추가) */}
+      <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 shadow-lg backdrop-blur-md mb-3.5 space-y-2.5">
+        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-yellow-400/15 text-yellow-300 rounded-lg">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                <span>{dailySummary.title}</span>
+                <span className="text-[10px] font-mono text-cyan-300 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                  4대 모델 종합
+                </span>
+              </h3>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-white/50">
+            일교차 {dailySummary.tempDiff}°C
+          </span>
+        </div>
+
+        {/* 4대 주요 기상 요약 그리드 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div className="bg-white/5 p-2.5 rounded-xl border border-white/5 space-y-1">
+            <div className="text-[10.5px] text-white/50 flex items-center gap-1">
+              <Thermometer className="w-3.5 h-3.5 text-yellow-400" />
+              <span>기온 요약</span>
+            </div>
+            <div className="text-white/90 font-medium leading-relaxed">
+              {dailySummary.tempSummary}
+            </div>
+          </div>
+
+          <div className="bg-white/5 p-2.5 rounded-xl border border-white/5 space-y-1">
+            <div className="text-[10.5px] text-white/50 flex items-center gap-1">
+              <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
+              <span>강수 전망</span>
+            </div>
+            <div className="text-white/90 font-medium leading-relaxed">
+              {dailySummary.rainSummary}
+            </div>
+          </div>
+
+          <div className="bg-white/5 p-2.5 rounded-xl border border-white/5 space-y-1">
+            <div className="text-[10.5px] text-white/50 flex items-center gap-1">
+              <Wind className="w-3.5 h-3.5 text-blue-400" />
+              <span>바람 상태</span>
+            </div>
+            <div className="text-white/90 font-medium leading-relaxed">
+              {dailySummary.windSummary}
+            </div>
+          </div>
+
+          <div className={`${dailySummary.isDrivingRain ? 'bg-rose-500/15 border-rose-500/30' : 'bg-amber-500/10 border-amber-500/20'} p-2.5 rounded-xl border space-y-1`}>
+            <div className={`text-[10.5px] ${dailySummary.isDrivingRain ? 'text-rose-300' : 'text-amber-300'} flex items-center justify-between font-semibold`}>
+              <span>💡 생활 기상 가이드</span>
+              {dailySummary.isDrivingRain && (
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200 border border-rose-400/40 font-mono font-medium">
+                  비바람 주의
+                </span>
+              )}
+            </div>
+            <div className={`${dailySummary.isDrivingRain ? 'text-rose-100' : 'text-amber-100'} font-medium leading-relaxed`}>
+              {dailySummary.lifeGuide}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 1. 타임라인 세그먼트 필터 헤더 & 중앙 정렬 바로가기 버튼 */}
       <div className="flex items-center justify-between gap-1 mb-2.5">
         <div

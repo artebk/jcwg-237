@@ -382,18 +382,12 @@ export async function fetchEnsembleForecast(location: LocationItem, gasUrl?: str
       recentHourlyRains: recent6hRains
     });
 
-    // 지상 관제 연동
-    const groundTruth = await analyzeMultiStationGroundTruth({
-      liveHumidity: liveObsHumidity,
-      liveRain: curHourRain,
-      liveWmo: liveObsCode ?? curKmaCode
-    });
-
+    // 지상 관제 연동: 기상청 및 4대 수치모델 실측 데이터와 노면 수분계측 지수(RMI) 직접 결합
     const cpiRes = calculateCompositePrecipitationIndex({
       wmoCode: liveObsCode,
       observedRain: Math.max(liveObsRain, curHourRain),
       radarEchoDbz: 0,
-      groundRainScore: groundTruth.groundRainLikelihood
+      groundRainScore: roadMoisture.rmi
     });
 
     const isDay = liveObsIsDay !== null ? liveObsIsDay : (kstNow.hourNum >= 6 && kstNow.hourNum < 20 ? 1 : 0);
@@ -427,6 +421,11 @@ export async function fetchEnsembleForecast(location: LocationItem, gasUrl?: str
       windSpeed: finalCurWind,
       windDirection: finalCurWindDir,
       isDay,
+      humidity: liveObsHumidity,
+      dewPoint: liveObsDewPoint,
+      roadMoistureIndex: roadMoisture.rmi,
+      roadCondition: roadMoisture.condition,
+      roadConditionText: roadMoisture.conditionText,
       updatedAt: now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Seoul' }),
       dataStatus: 'DIRECT_LIVE'
     };
@@ -522,13 +521,13 @@ export async function fetchEnsembleForecast(location: LocationItem, gasUrl?: str
       let ensT = Math.round(ensSlot.ensTemp);
       let ensPop = ensSlot.ensPop;
       let ensRain = ensSlot.ensRain;
-      let ensWind = Math.round(ensSlot.ensWind);
+      let ensWind = Number(ensSlot.ensWind.toFixed(1));
 
       if (isCurrent) {
         ensT = Math.round(finalCurTemp);
         ensPop = curKmaPopNum;
         ensRain = curKmaRainNum;
-        ensWind = Math.round(finalCurWind);
+        ensWind = Number(finalCurWind.toFixed(1));
       }
 
       const hourIsDay = isCurrent ? isDay : (itemHourNum >= 6 && itemHourNum < 20 ? 1 : 0);
@@ -554,7 +553,7 @@ export async function fetchEnsembleForecast(location: LocationItem, gasUrl?: str
         popNum: ensPop,
         rain: `${ensRain.toFixed(1)}mm`,
         rainNum: ensRain,
-        windSpeed: `${ensWind}m/s`,
+        windSpeed: `${ensWind.toFixed(1)}m/s`,
         windNum: ensWind,
         windDir: parseWindDirection(windDirs[idx]),
         ecmwfTemp: Number(ensSlot.rawTemps.ecmwf.toFixed(1)),

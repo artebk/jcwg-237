@@ -15,6 +15,7 @@ import {
   Droplets
 } from 'lucide-react';
 import { WeatherIcon } from './WeatherIcon';
+import { getWindSpeedScaleDescription } from '../utils/weatherSummaryGenerator';
 
 interface HeroWeatherProps {
   current: CurrentWeather;
@@ -345,19 +346,19 @@ export const HeroWeather: React.FC<HeroWeatherProps> = ({
           <div className="grid grid-cols-2 gap-1.5 mt-2.5 text-[10.5px] font-mono text-white/70 max-w-[240px]">
             <div className="bg-white/5 px-2 py-0.5 rounded border border-white/10 flex items-center justify-between gap-1">
               <span className="text-white/60">ECMWF:</span>
-              <strong className="text-blue-300">{(current.ecmwfTemp ?? current.temp ?? 0).toFixed(1)}°</strong>
+              <strong className="text-blue-300">{typeof current.ecmwfTemp === 'number' && !isNaN(current.ecmwfTemp) ? current.ecmwfTemp.toFixed(1) : (current.temp != null && !isNaN(current.temp) ? current.temp.toFixed(1) : '--.-')}°</strong>
             </div>
             <div className="bg-white/5 px-2 py-0.5 rounded border border-white/10 flex items-center justify-between gap-1">
               <span className="text-white/60">KMA:</span>
-              <strong className="text-emerald-300">{(current.kmaTemp ?? current.temp ?? 0).toFixed(1)}°</strong>
+              <strong className="text-emerald-300">{typeof current.kmaTemp === 'number' && !isNaN(current.kmaTemp) ? current.kmaTemp.toFixed(1) : (current.temp != null && !isNaN(current.temp) ? current.temp.toFixed(1) : '--.-')}°</strong>
             </div>
             <div className="bg-white/5 px-2 py-0.5 rounded border border-white/10 flex items-center justify-between gap-1">
               <span className="text-white/60">GFS:</span>
-              <strong className="text-cyan-300">{(current.gfsTemp ?? current.temp ?? 0).toFixed(1)}°</strong>
+              <strong className="text-cyan-300">{typeof current.gfsTemp === 'number' && !isNaN(current.gfsTemp) ? current.gfsTemp.toFixed(1) : (current.temp != null && !isNaN(current.temp) ? current.temp.toFixed(1) : '--.-')}°</strong>
             </div>
             <div className="bg-white/5 px-2 py-0.5 rounded border border-white/10 flex items-center justify-between gap-1">
               <span className="text-white/60">ICON:</span>
-              <strong className="text-amber-300">{(current.iconTemp ?? current.temp ?? 0).toFixed(1)}°</strong>
+              <strong className="text-amber-300">{typeof current.iconTemp === 'number' && !isNaN(current.iconTemp) ? current.iconTemp.toFixed(1) : (current.temp != null && !isNaN(current.temp) ? current.temp.toFixed(1) : '--.-')}°</strong>
             </div>
           </div>
         </div>
@@ -372,8 +373,17 @@ export const HeroWeather: React.FC<HeroWeatherProps> = ({
             </span>
           </div>
 
+          {/* 현재 기온 우측 핵심 습도 표출 영역 (사용자 요청 반영) */}
+          <div className="mt-1.5 flex items-center justify-end gap-1.5 text-xs text-cyan-200 bg-cyan-950/50 border border-cyan-500/30 px-2.5 py-1 rounded-xl shadow-inner font-sans">
+            <Droplets className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>현재습도 <strong className="font-mono font-bold text-cyan-100">{current.humidity != null ? current.humidity : 60}%</strong></span>
+            {current.dewPoint != null && !isNaN(Number(current.dewPoint)) && (
+              <span className="text-[10px] text-cyan-300/80 font-mono">(이슬점 {Number(current.dewPoint).toFixed(1)}°)</span>
+            )}
+          </div>
+
           {/* Precipitation: Realtime vs Today Accum vs 24h Total Forecast */}
-          <div className="mt-2 text-right space-y-0.5 font-mono">
+          <div className="mt-1.5 text-right space-y-0.5 font-mono">
             <div className="text-xs text-white/90 flex items-center justify-end gap-1 font-sans">
               <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
               <span>실시간 강수: <strong id="curHourRain" className="font-semibold text-cyan-200">{(current.rain ?? 0).toFixed(1)} mm/h</strong></span>
@@ -390,10 +400,16 @@ export const HeroWeather: React.FC<HeroWeatherProps> = ({
       {/* Wind & Humidity & Road Moisture & Meta */}
       <div className="mt-4 flex items-center justify-between text-xs text-white/50 pt-2.5 border-t border-white/5 flex-wrap gap-y-2">
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="flex items-center gap-1 text-white/70">
-            <Wind className="w-3.5 h-3.5 text-blue-300" />
-            <span>풍속 {(current.windSpeed ?? 1.0).toFixed(1)}m/s</span>
-          </span>
+          {(() => {
+            const windSpeedNum = typeof current.windSpeed === 'number' && !isNaN(current.windSpeed) ? current.windSpeed : (Number(current.windSpeed) || 1.0);
+            const windScale = getWindSpeedScaleDescription(windSpeedNum);
+            return (
+              <span className="flex items-center gap-1 text-white/80" title={windScale.tip}>
+                <Wind className="w-3.5 h-3.5 text-blue-300" />
+                <span>풍속 <strong className="font-mono font-semibold text-white">{windSpeedNum.toFixed(1)}m/s</strong> ({windScale.label})</span>
+              </span>
+            );
+          })()}
           <span className="flex items-center gap-1 text-white/70">
             <Compass className="w-3.5 h-3.5 text-yellow-300" />
             <span>풍향 {current.windDirection || '남'}</span>
@@ -402,8 +418,8 @@ export const HeroWeather: React.FC<HeroWeatherProps> = ({
             <span className="flex items-center gap-1 text-white/70">
               <Droplets className="w-3.5 h-3.5 text-cyan-300" />
               <span>습도 {current.humidity}%</span>
-              {current.dewPoint != null && (
-                <span className="text-[10px] text-white/40 font-mono">(이슬점 {current.dewPoint}°)</span>
+              {current.dewPoint != null && !isNaN(Number(current.dewPoint)) && (
+                <span className="text-[10px] text-white/40 font-mono">(이슬점 {Number(current.dewPoint).toFixed(1)}°)</span>
               )}
             </span>
           )}
@@ -425,18 +441,6 @@ export const HeroWeather: React.FC<HeroWeatherProps> = ({
                   ({Math.round(current.roadMoistureIndex * 100)}%)
                 </span>
               )}
-            </span>
-          )}
-          {current.umbrellaIndex != null && current.umbrellaIndex > 0.1 && (
-            <span
-              id="umbrellaIndexBadge"
-              className="inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-full font-sans font-medium bg-purple-500/20 text-purple-200 border border-purple-400/40"
-              title={`초전 학원가·상가 사거리 보행자 우산 관제 지수: ${Math.round(current.umbrellaIndex * 100)}%`}
-            >
-              <span>☂️ 우산 착용</span>
-              <span className="font-mono text-[9.5px] opacity-75">
-                ({Math.round(current.umbrellaIndex * 100)}%)
-              </span>
             </span>
           )}
         </div>
