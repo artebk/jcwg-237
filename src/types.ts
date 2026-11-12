@@ -57,8 +57,6 @@ export interface CurrentWeather {
   roadMoistureIndex?: number;
   roadCondition?: 'DRY' | 'DAMP' | 'WET';
   roadConditionText?: string;
-  /** @deprecated 허위 가상 영상 분석 뱃지 제거로 미사용 */
-  umbrellaIndex?: number;
   cpi?: number;
   updatedAt: string;
   dataStatus?: DataStatus;
